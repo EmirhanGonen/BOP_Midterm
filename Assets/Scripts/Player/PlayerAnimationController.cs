@@ -1,11 +1,13 @@
-using System;
+using UnityEngine;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using UnityEngine;
 
 public class PlayerAnimationController : MonoBehaviour
 {
     [SerializeField] private Animator animator = null;
+    [SerializeField] private float toIdleAnimationDelay = 0.20f;
+
+    private const int BaseLayer = 0;
 
     private const string IdleAnimationKey = "Idle";
     private static readonly int IDLE_ANIMATION_HASH = Animator.StringToHash(IdleAnimationKey);
@@ -13,28 +15,87 @@ public class PlayerAnimationController : MonoBehaviour
     private const string UnarmedToArmedAnimationKey = "UnarmedToArmed";
     private static readonly int UNARMED_TO_ARMED_ANIMATION_HASH = Animator.StringToHash(UnarmedToArmedAnimationKey);
 
+    private CancellationTokenSource animationCancellationTokenSource = null;
+
+    private bool isLocked = false;
+
+    public bool CanPlayCombatAnimation => !isLocked;
+
     private void Awake()
     {
-        PlayStartAnimation();
+        PlayStartAnimation().Forget();
     }
 
+    private void OnDestroy()
+    {
+        CancelCurrentAnimation();
+    }
 
     private async UniTaskVoid PlayStartAnimation()
     {
-        animator.Play(UNARMED_TO_ARMED_ANIMATION_HASH);
-        await UniTask.Yield();
-        
-        CancellationToken token = this.GetCancellationTokenOnDestroy();
-        await UniTask.WaitUntil(
-            () => animator.GetCurrentAnimatorStateInfo(0).normalizedTime >= 1.00f,
-            cancellationToken: token);
-
-        animator.Play(IDLE_ANIMATION_HASH);
+        bool completed = await PlayAndWaitAsync(UNARMED_TO_ARMED_ANIMATION_HASH, uninterruptible: true);
+        if (completed)
+            PlayIdle();
     }
 
-
-    public void PlayCombatAnimation(in CombatData combatData)
+    /// <summary>
+    /// Plays the attack animation and waits until it ends. Does NOT return to Idle,
+    /// so the caller can do something after the attack (e.g. dash back) first.
+    /// Returns false if the animation could not play or was interrupted.
+    /// </summary>
+    public async UniTask<bool> PlayCombatAnimationAsync(CombatData combatData)
     {
-        animator.Play(combatData.GetAttackAnimationClipHash());
+        if (isLocked)
+            return false;
+
+        bool completed = await PlayAndWaitAsync(combatData.GetAttackAnimationClipHash());
+        if (!completed)
+            return false;
+
+        // Hold the last attack frame for a moment before the caller moves on.
+        bool cancelled = await UniTask.Delay(System.TimeSpan.FromSeconds(toIdleAnimationDelay),
+            cancellationToken: animationCancellationTokenSource.Token).SuppressCancellationThrow();
+        return !cancelled;
+    }
+
+    public void PlayIdle()
+    {
+        animator.Play(IDLE_ANIMATION_HASH, BaseLayer, 0.00f);
+    }
+
+    private async UniTask<bool> PlayAndWaitAsync(int stateHash, bool uninterruptible = false)
+    {
+        CancelCurrentAnimation();
+        animationCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
+        CancellationToken token = animationCancellationTokenSource.Token;
+
+        isLocked = uninterruptible;
+        animator.Play(stateHash, BaseLayer, 0.00f);
+
+        bool cancelled = await WaitUntilAnimationEnd(token).SuppressCancellationThrow();
+        if (uninterruptible)
+            isLocked = false;
+
+        return !cancelled;
+    }
+
+    private async UniTask WaitUntilAnimationEnd(CancellationToken token)
+    {
+        await UniTask.Yield(PlayerLoopTiming.PostLateUpdate, token);
+
+        AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(BaseLayer);
+
+        float duration = info.length / Mathf.Max(animator.speed, 0.0001f);
+        await UniTask.Delay(System.TimeSpan.FromSeconds(duration), cancellationToken: token);
+    }
+
+    private void CancelCurrentAnimation()
+    {
+        if (animationCancellationTokenSource == null)
+            return;
+
+        animationCancellationTokenSource.Cancel();
+        animationCancellationTokenSource.Dispose();
+        animationCancellationTokenSource = null;
     }
 }

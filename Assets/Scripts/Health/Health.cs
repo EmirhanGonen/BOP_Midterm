@@ -9,19 +9,27 @@ public class Health : MonoBehaviour
     [SerializeField] private UnityEvent<OnTakeDamagePackage> onTakeDamageEvent = new UnityEvent<OnTakeDamagePackage>();
     [SerializeField] private UnityEvent onDeadEvent = new UnityEvent();
 
-    private void Start()
+    private bool isDead = false;
+
+    public bool IsDead => isDead;
+
+    private void Awake()
     {
         currentHealth = maxHealth;
     }
 
     public void TakeDamage(int damage)
     {
-        currentHealth -= damage;
-        
+        if (isDead || damage <= 0)
+            return;
+
+        currentHealth = Mathf.Max(currentHealth - damage, 0);
+
         onTakeDamageEvent?.Invoke((currentHealth, maxHealth));
         if (currentHealth > 0)
             return;
-        
+
+        isDead = true;
         onDeadEvent?.Invoke();
     }
 }
@@ -31,6 +39,9 @@ public struct OnTakeDamagePackage
 {
     [SerializeField] private int currentHealth;
     [SerializeField] private int maxHealth;
+    
+    public int GetCurrentHealth()=> currentHealth;
+    public int GetMaxHealth() => maxHealth;
 
     public OnTakeDamagePackage(int currentHealth, int maxHealth)
     {
