@@ -324,7 +324,7 @@ MonoBehaviour:
   combatData:
   - {fileID: 11400000, guid: a5b9f0450646842e689545cee8c0a663, type: 2}
   - {fileID: 11400000, guid: ef918df1bc91a43809fb44d2f3da209f, type: 2}
-  playerAnimationController: {fileID: 0}
+  playerAnimationController: {fileID: 316675689}
 --- !u!114 &316675689
 MonoBehaviour:
   m_ObjectHideFlags: 0
