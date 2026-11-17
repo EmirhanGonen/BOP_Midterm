@@ -1,7 +1,10 @@
 using MoreMountains.Feedbacks;
+using MoreMountains.FeedbacksForThirdParty;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 /// <summary>
 /// One-click setup for the attack feedbacks (Feel). Creates the MMF_Players under the player,
@@ -11,6 +14,12 @@ using UnityEngine;
 public static class CombatFeedbackSetup
 {
     private const string FeedbacksRootName = "Feedbacks";
+    private const string PostProcessObjectName = "CombatPostProcess";
+    private const string VolumeProfilePath = "Assets/Settings/CombatVolumeProfile.asset";
+
+    // Peak lens distortion while charging. Negative: the centre of the screen is pulled inward and
+    // shrinks, so the camera feels like it is moving back. Positive would bulge the centre out instead.
+    private const float ChargeLensDistortion = -0.45f;
 
     [MenuItem("Tools/Combat/Setup Feel Feedbacks")]
     private static void Setup()
@@ -31,8 +40,19 @@ public static class CombatFeedbackSetup
 
         // Shakers that listen to the camera feedbacks.
         GetOrAdd<MMCameraShaker>(camera.gameObject);
-        GetOrAdd<MMCameraOrthographicSizeShaker>(camera.gameObject);
         SetupCameraWiggle(GetOrAdd<MMWiggle>(camera.gameObject));
+
+        // The orthographic size zoom was replaced by lens distortion (it also scaled the background).
+        MMCameraOrthographicSizeShaker oldZoomShaker = camera.GetComponent<MMCameraOrthographicSizeShaker>();
+        if (oldZoomShaker != null)
+            Undo.DestroyObjectImmediate(oldZoomShaker);
+
+        // Lens distortion needs post-processing on the camera and a Volume with a Lens Distortion override.
+        UniversalAdditionalCameraData cameraData = camera.GetUniversalAdditionalCameraData();
+        Undo.RecordObject(cameraData, "Enable Post Processing");
+        cameraData.renderPostProcessing = true;
+        EditorUtility.SetDirty(cameraData);
+        SetupLensDistortionVolume();
 
         // Character trembles while charging. Shake the visual child so it does not fight the dash movement.
         Transform visual = combat.transform.Find("Visual");
@@ -49,7 +69,7 @@ public static class CombatFeedbackSetup
 
         MMF_Player charge = CreatePlayer(feedbacksRoot, "ChargeFeedback");
         AddCameraShake(charge, duration: 0.60f, amplitude: 0.15f, frequency: 35.00f);
-        AddCameraPullBack(charge, duration: 0.60f, extraOrthographicSize: 0.70f);
+        AddLensPullBack(charge, duration: 0.60f);
         AddTremble(charge, positionShaker, duration: 0.60f);
 
         MMF_Player dash = CreatePlayer(feedbacksRoot, "DashFeedback");
@@ -117,17 +137,63 @@ public static class CombatFeedbackSetup
         EditorUtility.SetDirty(player);
     }
 
-    /// <summary>Camera slowly moves "back" = orthographic size grows over the charge, then resets.</summary>
-    private static void AddCameraPullBack(MMF_Player player, float duration, float extraOrthographicSize)
+    /// <summary>
+    /// A global Volume whose only override is Lens Distortion (intensity 0 at rest),
+    /// plus the Feel shaker that animates it.
+    /// </summary>
+    private static MMLensDistortionShaker_URP SetupLensDistortionVolume()
     {
-        MMF_CameraOrthographicSize zoom = (MMF_CameraOrthographicSize)player.AddFeedback(typeof(MMF_CameraOrthographicSize));
-        zoom.Label = "Camera Pull Back";
-        zoom.Duration = duration;
-        zoom.RelativeOrthographicSize = true;
-        zoom.ShakeOrthographicSize = AnimationCurve.EaseInOut(0.00f, 0.00f, 1.00f, 1.00f);
-        zoom.RemapOrthographicSizeZero = 0.00f;
-        zoom.RemapOrthographicSizeOne = extraOrthographicSize;
-        zoom.ResetTargetValuesAfterShake = true;
+        VolumeProfile profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);
+        if (profile == null)
+        {
+            if (!AssetDatabase.IsValidFolder("Assets/Settings"))
+                AssetDatabase.CreateFolder("Assets", "Settings");
+
+            profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            AssetDatabase.CreateAsset(profile, VolumeProfilePath);
+        }
+
+        if (!profile.TryGet(out LensDistortion lensDistortion))
+        {
+            lensDistortion = profile.Add<LensDistortion>(true);
+            lensDistortion.name = nameof(LensDistortion);
+            AssetDatabase.AddObjectToAsset(lensDistortion, profile);
+        }
+        lensDistortion.active = true;
+        lensDistortion.intensity.Override(0.00f);
+        lensDistortion.scale.Override(1.00f);
+        EditorUtility.SetDirty(lensDistortion);
+        EditorUtility.SetDirty(profile);
+        AssetDatabase.SaveAssets();
+
+        GameObject volumeObject = GameObject.Find(PostProcessObjectName);
+        if (volumeObject == null)
+        {
+            volumeObject = new GameObject(PostProcessObjectName);
+            Undo.RegisterCreatedObjectUndo(volumeObject, "Create Combat Post Process");
+        }
+
+        Volume volume = GetOrAdd<Volume>(volumeObject);
+        Undo.RecordObject(volume, "Setup Combat Volume");
+        volume.isGlobal = true;
+        volume.priority = 10.00f;
+        volume.sharedProfile = profile;
+        EditorUtility.SetDirty(volume);
+
+        return GetOrAdd<MMLensDistortionShaker_URP>(volumeObject);
+    }
+
+    /// <summary>Fisheye builds up over the charge (feels like the camera is pulled back), then resets.</summary>
+    private static void AddLensPullBack(MMF_Player player, float duration)
+    {
+        MMF_LensDistortion_URP lens = (MMF_LensDistortion_URP)player.AddFeedback(typeof(MMF_LensDistortion_URP));
+        lens.Label = "Lens Pull Back";
+        lens.Duration = duration;
+        lens.RelativeIntensity = false;
+        lens.Intensity = AnimationCurve.EaseInOut(0.00f, 0.00f, 1.00f, 1.00f);
+        lens.RemapIntensityZero = 0.00f;
+        lens.RemapIntensityOne = ChargeLensDistortion;
+        lens.ResetTargetValuesAfterShake = true;
         EditorUtility.SetDirty(player);
     }
 

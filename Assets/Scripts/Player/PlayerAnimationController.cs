@@ -38,11 +38,6 @@ public class PlayerAnimationController : MonoBehaviour
             PlayIdle();
     }
 
-    /// <summary>
-    /// Plays the attack animation and waits until it ends. Does NOT return to Idle,
-    /// so the caller can do something after the attack (e.g. dash back) first.
-    /// Returns false if the animation could not play or was interrupted.
-    /// </summary>
     public async UniTask<bool> PlayCombatAnimationAsync(CombatData combatData)
     {
         if (isLocked)
@@ -52,7 +47,6 @@ public class PlayerAnimationController : MonoBehaviour
         if (!completed)
             return false;
 
-        // Hold the last attack frame for a moment before the caller moves on.
         bool cancelled = await UniTask.Delay(System.TimeSpan.FromSeconds(toIdleAnimationDelay),
             cancellationToken: animationCancellationTokenSource.Token).SuppressCancellationThrow();
         return !cancelled;
