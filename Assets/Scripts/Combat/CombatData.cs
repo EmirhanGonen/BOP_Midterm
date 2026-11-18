@@ -6,6 +6,8 @@ public class CombatData : ScriptableObject
     [SerializeField] private int damage = 0;
     [SerializeField] private string attackAnimationKey = string.Empty;
 
+    [SerializeField] private float cooldown = 3.00f;
+
     [SerializeField, Min(0.00f)] private float attackDistance = 2.00f;
     [SerializeField, Min(0.00f)] private float chargeDuration = 0.60f;
     [SerializeField, Min(0.01f)] private float dashDuration = 0.12f;
@@ -14,6 +16,7 @@ public class CombatData : ScriptableObject
     public int GetDamageAmount() => damage;
     public int GetAttackAnimationClipHash() => Animator.StringToHash(attackAnimationKey);
 
+    public float GetCooldown() => cooldown;
     public float GetAttackDistance() => attackDistance;
     public float GetChargeDuration() => chargeDuration;
     public float GetDashDuration() => dashDuration;
