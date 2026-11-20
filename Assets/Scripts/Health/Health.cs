@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.Rendering;
 
 public class Health : MonoBehaviour
 {
@@ -12,6 +13,8 @@ public class Health : MonoBehaviour
     private bool isDead = false;
 
     public bool IsDead => isDead;
+    public int CurrentHealth => currentHealth;
+    public int MaxHealth => maxHealth;
 
     private void Awake()
     {

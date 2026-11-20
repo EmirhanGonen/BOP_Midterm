@@ -2,6 +2,7 @@ using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
 using Cysharp.Threading.Tasks;
+using TMPro;
 using UnityEngine.EventSystems;
 
 public class CombatButton : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
@@ -12,6 +13,8 @@ public class CombatButton : MonoBehaviour, IPointerEnterHandler, IPointerExitHan
     [SerializeField] private Transform scaleTarget = null;
     [SerializeField, Min(1.00f)] private float hoverScale = 1.10f;
     [SerializeField, Min(0.00f)] private float hoverDuration = 0.15f;
+    [SerializeField] private TextMeshProUGUI skillNameText = null;
+    [SerializeField] private Image skillIconImage = null;
 
     [SerializeField] private Image durationFill = null;
 
@@ -24,6 +27,9 @@ public class CombatButton : MonoBehaviour, IPointerEnterHandler, IPointerExitHan
     {
         combatButton = GetComponent<Button>();
         combatButton.onClick.AddListener(CombatAction);
+        
+        skillNameText.SetText(combatData.GetSkillName());
+        skillIconImage.sprite = combatData.GetSkillIcon();
 
         if (!scaleTarget)
             scaleTarget = transform.parent ? transform.parent : transform;
@@ -65,8 +71,11 @@ public class CombatButton : MonoBehaviour, IPointerEnterHandler, IPointerExitHan
         if (durationFill)
             durationFill.fillAmount = 1.00f;
 
-        await UniTask.WaitWhile(() => playerCombat.IsAttacking, cancellationToken: this.GetCancellationTokenOnDestroy())
+        bool cancelled = await UniTask.WaitWhile(() => playerCombat.IsAttacking, cancellationToken: this.GetCancellationTokenOnDestroy())
             .SuppressCancellationThrow();
+        
+        if (cancelled)
+            return;
 
         if (!durationFill)
         {

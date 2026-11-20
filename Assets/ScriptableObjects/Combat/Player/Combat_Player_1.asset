@@ -12,5 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7d961228693344e7dbfb337454fcac3e, type: 3}
   m_Name: Combat_Player_1
   m_EditorClassIdentifier: Assembly-CSharp::CombatData
-  damage: 10
+  skillIcon: {fileID: 8645647501318486533, guid: 75246cfcb0b87454293c0a51ae6329bb, type: 3}
+  skillName: Cult Punisher
   attackAnimationKey: Player_Combat_1
+  cooldown: 3
+  damage: 10
+  attackDistance: 2
+  chargeDuration: 0.6
+  dashDuration: 0.12
+  returnDuration: 0.25
